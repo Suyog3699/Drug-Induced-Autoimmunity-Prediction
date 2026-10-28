@@ -30,8 +30,6 @@ The notebook loads separate training and external test CSV files containing RDKi
 - After standardization, variance filtering, and correlation filtering, **140 descriptors** remain.
 - The later Random Forest imbalance comparison uses **93 features selected by Mutual Information** on the training set.
 
-**Data provenance:** Add the original dataset publication/repository URL, citation, license, and download instructions here before making a public release. The HTML notebook alone does not establish redistribution rights. Do not upload the CSV files unless permitted.
-
 ## Methodology
 
 ### 1. Preprocessing
@@ -161,9 +159,9 @@ Across the 10 unique model pairs, top-10 overlap ranges from **4/10 to 7/10**, a
 
 | Descriptor | Number of strategies placing it in the top 10 |
 |---|---:|
-| **SlogP_VSA10** | **5/5** |
-| **SlogP_VSA1** | **5/5** |
-| **SMR_VSA10** | **5/5** |
+| __SlogP_VSA10__ | __5/5__ |
+| __SlogP_VSA1__ | __5/5__ |
+| __SMR_VSA10__ | __5/5__ |
 | EState_VSA1 | 4/5 |
 | fr_NH2 | 3/5 |
 | SMR_VSA3 | 3/5 |
@@ -174,7 +172,7 @@ The first three descriptors appear in the top 10 for every imbalance strategy. T
 
 ### SHAP dependence plots
 
-The notebook generates **15 dependence plots**: three recurring descriptors (`SlogP_VSA10`, `SlogP_VSA1`, `SMR_VSA10`) across five imbalance strategies.
+The notebook generates __15 dependence plots__: three recurring descriptors (`SlogP_VSA10`, `SlogP_VSA1`, `SMR_VSA10`) across five imbalance strategies.
 
 Visual inspection suggests:
 
@@ -217,29 +215,155 @@ Other limitations:
 
 Potential extensions include leakage-safe nested or repeated cross-validation, uncertainty estimates, threshold analysis, additional independent validation, and repeated-run SHAP stability analysis.
 
-## Repository contents and how to run
+## Summary
 
-Recommended layout:
+This study investigated the prediction of **drug-induced autoimmunity (DIA)** using machine learning, with particular emphasis on feature selection, class imbalance, predictive performance, and model interpretability. Using molecular descriptors derived from chemical structures and the dataset associated with Huang et al. (2025), the research explored how different modeling decisions influence both the identification of potentially autoimmunity-inducing drugs and the molecular features used to explain those predictions.
 
-```text
-drug-induced-autoimmunity-prediction/
-├── README.md
-├── requirements.txt
-├── notebooks/
-│   └── DIA_Research.ipynb
-├── data/
-│   └── README.md                 # Dataset source and download instructions
-├── results/                     # Selected tables and confusion matrices
-└── figures/                     # Selected SHAP figures
-```
+### 1. Machine Learning Models and Feature Selection
 
-1. Obtain the dataset from its original authorized source.
-2. Place the training and external test CSVs in `data/` (or adjust the notebook's relative paths).
-3. Install the dependencies documented in `requirements.txt` and open `notebooks/DIA_Research.ipynb`.
-4. Run cells in order. The original notebook contains absolute local paths that must be updated before it will run on another computer.
+Three machine learning classifiers were investigated:
 
-Core Python packages used include `numpy`, `pandas`, `scikit-learn`, `imbalanced-learn`, `shap`, `matplotlib`, `joblib`, and a package providing `genetic_selection.GeneticSelectionCV`. Record the exact versions from the environment used for the final run to improve reproducibility.
+- Logistic Regression (LR)
+- Random Forest (RF)
+- Support Vector Machine (SVM)
 
-## Status
+These models were evaluated alongside three feature selection approaches: **Mutual Information (MI), Recursive Feature Elimination with Cross-Validation (RFECV), and Genetic Algorithm (GA)**.
 
-**Exploratory undergraduate research project / portfolio implementation.** Results are presented transparently, including methodological limitations. This repository is not a validated clinical decision-support tool.
+The original dataset contained 196 RDKit molecular descriptors. Following preprocessing, including low-variance feature removal and correlation filtering, 140 descriptors remained for further analysis.
+
+The feature selection experiments examined whether reducing the number of molecular descriptors could preserve predictive information while improving model efficiency and interpretability. They also demonstrated the importance of evaluating feature selection jointly with the classifier rather than assuming that one feature subset will perform equally well across different algorithms.
+
+Random Forest was subsequently used for the detailed comparison of class-imbalance handling strategies and SHAP-based interpretation.
+
+### 2. Class Imbalance and External Test Performance
+
+Because DIA-positive drugs represented a minority of the dataset, class imbalance was an important methodological challenge. Five strategies were compared using Random Forest:
+
+1. Baseline (no imbalance correction)
+2. Synthetic Minority Oversampling Technique (SMOTE)
+3. Class Weight Adjustment
+4. Random Oversampling (ROS)
+5. Random Undersampling (RUS)
+
+The models were evaluated on an independent external test set containing **120 drugs: 90 DIA-negative and 30 DIA-positive**.
+
+| Strategy | MCC | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline | 0.510 | 0.833 | 0.857 | 0.400 | 0.545 | 0.881 | 0.740 |
+| **SMOTE** | **0.542** | **0.842** | **0.923** | 0.400 | 0.558 | 0.893 | **0.794** |
+| Class Weight | 0.484 | 0.825 | 0.909 | 0.333 | 0.488 | **0.901** | 0.751 |
+| ROS | 0.450 | 0.817 | 0.786 | 0.367 | 0.500 | 0.885 | 0.726 |
+| RUS | 0.460 | 0.742 | 0.490 | **0.800** | **0.608** | 0.850 | 0.719 |
+
+**SMOTE achieved the highest Matthews Correlation Coefficient (MCC = 0.542)**, the highest precision (0.923), and the highest PR-AUC (0.794), indicating the strongest overall balance among the evaluated strategies according to the primary MCC criterion.
+
+However, SMOTE correctly identified only **12 of the 30 DIA-positive drugs**, corresponding to a recall of 40%. Its high precision was accompanied by a substantial number of missed positive cases.
+
+In contrast, **Random Undersampling achieved 80% recall**, correctly identifying 24 of the 30 DIA-positive drugs. This improvement came at the cost of 25 false-positive predictions, compared with only one false positive for SMOTE.
+
+This demonstrates a central finding of the study: **the preferred imbalance-handling strategy depends on the relative importance of false-negative and false-positive predictions**.
+
+In early-stage drug safety screening, where failing to flag a potentially harmful compound may be particularly concerning, a higher-recall model such as RUS may be useful as a preliminary screening tool. However, its higher false-positive rate could increase the number of compounds requiring additional investigation.
+
+SMOTE may be more appropriate when a smaller number of high-confidence positive predictions is preferred.
+
+Neither strategy should be considered sufficient for clinical or regulatory decisions without additional validation.
+
+### 3. SHAP Explainability and Molecular Descriptor Importance
+
+SHapley Additive exPlanations (SHAP) were used to investigate how molecular descriptors contributed to Random Forest predictions across the five imbalance-handling strategies.
+
+The analysis included global feature importance, beeswarm plots, dependence plots, individual prediction explanations, and comparisons of the most influential descriptors across models.
+
+Several molecular descriptors repeatedly appeared among the most influential features:
+
+- **SlogP_VSA10**
+- **SlogP_VSA1**
+- **SMR_VSA10**
+- **EState_VSA1**
+
+SlogP_VSA10, SlogP_VSA1, and SMR_VSA10 appeared in the top ten SHAP features across all five imbalance strategies, while EState_VSA1 appeared in four.
+
+These findings indicate that molecular properties represented by these descriptors consistently contributed to the trained models' predictions, despite differences in the class-imbalance strategy.
+
+However, the average top-ten feature overlap across strategies was approximately **53%**, suggesting that a substantial portion of the model explanations changed when the imbalance-handling method changed.
+
+Therefore, the choice of imbalance strategy affects not only classification performance but also **which molecular properties appear most important to the model**.
+
+This is particularly relevant in interpretable machine learning for drug safety, where explanations may be used to generate scientific hypotheses.
+
+### 4. Chemical Interpretation of the Important Descriptors
+
+The consistently important molecular descriptors have meaningful connections to physicochemical properties of drug molecules.
+
+**SlogP_VSA1 and SlogP_VSA10** are molecular surface-area descriptors grouped according to atom contributions to estimated lipophilicity (SlogP). They encode aspects of the distribution of hydrophobic and hydrophilic characteristics across a molecule.
+
+Lipophilicity is relevant to drug absorption, membrane partitioning, tissue distribution, and interactions with biological environments. Differences in these properties can influence drug exposure and the opportunities for interactions with cellular components.
+
+**SMR_VSA10** represents molecular surface-area information grouped according to atomic contributions to molar refractivity. Molar refractivity is associated with molecular polarizability and volume-related properties, which can be relevant to noncovalent molecular interactions.
+
+**EState_VSA1** combines molecular surface-area information with electrotopological state characteristics, providing a representation of aspects of the electronic and topological environments of atoms within a molecule.
+
+The recurring importance of these descriptors suggests that **surface-area-related physicochemical properties, lipophilicity-associated features, and electronic/topological molecular characteristics contain predictive information for DIA classification in this dataset**.
+
+These results are associations learned by the models. They do not establish that any individual descriptor directly causes drug-induced autoimmunity.
+
+### 5. Biological Relevance to Drug-Induced Autoimmunity
+
+Drug-induced autoimmunity is a complex biological phenomenon involving interactions among drug exposure, metabolism, immune regulation, and individual susceptibility.
+
+Potential biological mechanisms include drug-related changes in self-antigen recognition, formation of reactive metabolites or drug-protein adducts, altered immune signaling, and the activation of autoreactive immune responses.
+
+The molecular descriptors highlighted by SHAP may be indirectly relevant to these processes through their relationships with drug distribution, chemical reactivity, molecular interactions, and biological exposure.
+
+For example, lipophilicity-associated properties may influence how a compound distributes across tissues and cellular membranes, potentially affecting the environments in which drug-related immune interactions occur.
+
+Likewise, electronic and molecular surface-area characteristics may be relevant to how drug molecules interact with proteins and other biological structures.
+
+However, **the present study did not directly measure immune activation, protein binding, metabolite formation, or autoimmune pathways**. Consequently, the SHAP findings should be interpreted as potential starting points for chemical and biological investigation rather than evidence of a specific immunological mechanism.
+
+Experimental toxicology studies, mechanistic assays, and independent chemical validation would be necessary to determine whether these molecular characteristics have a causal role in DIA.
+
+### 6. Stability of Model Explanations
+
+A further observation was that SHAP explanations were only partially consistent across the five imbalance-handling strategies.
+
+Although several molecular descriptors remained important across all strategies, the approximately 53% average overlap among the top ten descriptors indicates that explanation rankings were sensitive to the training procedure.
+
+Individual prediction explanations also differed across strategies. For one examined drug, predicted DIA-positive probabilities ranged from approximately 0.05 to 0.13, depending on the model.
+
+This suggests that **changes in class-imbalance handling can influence both predicted risk scores and the apparent molecular drivers of those predictions**.
+
+Accordingly, model interpretability should not be evaluated solely by generating SHAP plots for a single model. Comparing explanations across reasonable modeling choices provides additional information about their robustness.
+
+### 7. Limitations and Future Research
+
+Several limitations should be considered when interpreting these results.
+
+First, the dataset was relatively small, particularly the external DIA-positive test group, which contained only 30 compounds. As a result, performance metrics such as recall and MCC may be sensitive to a small number of classification changes.
+
+Second, the models relied on calculated molecular descriptors rather than direct measurements of biological pathways, immune responses, or patient-specific susceptibility.
+
+Third, some preprocessing operations may have occurred before cross-validation rather than being refitted independently within every training fold. If so, this could introduce information leakage into cross-validation estimates and should be addressed in future work.
+
+Fourth, SHAP measures contributions to model predictions rather than chemical causality or biological mechanisms.
+
+Future studies could investigate larger and more chemically diverse datasets, scaffold-based validation, additional external datasets, probability calibration, and experimental assessment of the molecular hypotheses suggested by SHAP.
+
+### Overall Conclusion
+
+**This research demonstrates that class-imbalance handling is a critical factor in machine learning-based prediction of drug-induced autoimmunity, affecting both predictive performance and model interpretability.**
+
+SMOTE provided the highest external-test MCC and PR-AUC, whereas Random Undersampling substantially increased the detection of DIA-positive drugs at the expense of more false positives. These findings highlight the importance of choosing evaluation metrics and decision thresholds according to the intended drug safety screening objective.
+
+The SHAP analysis further identified recurring molecular descriptors related to lipophilicity-associated surface area, molar refractivity, and electrotopological properties. Their repeated importance suggests that physicochemical characteristics of drug molecules contain useful predictive signals for DIA classification.
+
+At the same time, the variation in SHAP feature rankings across imbalance strategies emphasizes that machine learning explanations depend partly on modeling choices and should not be interpreted as definitive biological mechanisms.
+
+**Overall, the study connects computational chemistry, machine learning, and drug safety research by showing how molecular descriptors can support predictive screening and generate hypotheses for further biological investigation.** The findings provide a foundation for future work combining robust external validation, interpretable modeling, and experimental toxicology to improve the identification and understanding of potentially autoimmunity-inducing drugs.
+
+## References
+
+1. Huang, L., Liu, P., & Huang, X. (2025). *InterDIA: Interpretable Prediction of Drug-induced Autoimmunity through Ensemble Machine Learning Approaches.* Toxicology, Article 154064. https://github.com/Huangxiaojie2024/InterDIA
+
+2. Lundberg, S. M., & Lee, S.-I. (2017). *A Unified Approach to Interpreting Model Predictions.* Advances in Neural Information Processing Systems, 30. https://arxiv.org/abs/1705.07874
